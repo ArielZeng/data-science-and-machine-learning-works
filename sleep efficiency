@@ -1,0 +1,159 @@
+import pandas as pd
+
+
+# 1:
+
+
+df = None
+df = pd.read_csv("Sleep_Efficiency.csv")
+df.head()
+
+
+# In[92]:
+
+
+df.set_index("ID", inplace=True)
+df.dtypes
+
+
+# 2:
+
+
+count_per_col = [ (col, df[col].value_counts().size) for col in df.columns ]
+count_per_col
+
+
+# 3:
+
+
+na_per_col = [ (col, df[col][df[col].isna()].size) for col in df.columns ]
+na_per_col
+
+
+# 4:
+
+
+def get_avg_similar_age(age, df, col_name):
+    df["age_diff_abs"] = df.Age.apply(lambda x: abs(x-age))
+    #     print(df.head(2))
+    head = df.sort_values("age_diff_abs",).head()[col_name]
+    #     print("get mean for:", age, " is ", head.mean())
+    return head.mean()
+
+def set_avg_for_na(df, col_name):
+    rows = df[df[col_name].isna()]
+    print(rows.index)
+    for ID in rows.index:
+        row = rows.loc[ID]
+        #         print("get one na", row.Gender, row.Age, row[col_name], ID, df.loc[ID, col_name])
+        df.loc[ID, col_name] = get_avg_similar_age(row.Age, df[(df.Gender == row.Gender) & (df.index != ID)], col_name)
+    
+set_avg_for_na(df, 'Awakenings')
+set_avg_for_na(df, 'Caffeine consumption')
+set_avg_for_na(df, 'Alcohol consumption')
+set_avg_for_na(df, 'Exercise frequency')
+
+
+# 4:
+
+
+df.loc[[20, 86, 6,  25,21, 76, 34, 63]]
+
+
+# 5:
+
+
+def age_2_category(age):
+    if age <= 12: return "children"
+    elif age <= 17: return "teenagers"
+    elif age <= 30: return "young adults"
+    elif age <= 60: return "adults"
+    return "older adults"
+
+df["category"] = df.Age.apply(lambda x:age_2_category(x))
+df.head()
+
+
+# 5:
+
+
+all_genders_cate_group = df.groupby("category")[["Age", "Sleep duration", "Sleep efficiency", "REM sleep percentage", 
+                                  "Deep sleep percentage", "Light sleep percentage", "Awakenings", "Smoking status", "Exercise frequency"]].agg(func='mean')
+# all_genders_cate_group = all_genders_cate_group.transpose
+all_genders_cate_group
+
+
+# 5:
+
+
+male_cate_group = df[df.Gender=="Male"].groupby("category")[["Age", "Sleep duration", "Sleep efficiency", "REM sleep percentage", 
+                                  "Deep sleep percentage", "Light sleep percentage", "Awakenings", "Smoking status", "Exercise frequency"]].agg(func='mean')
+# all_genders_cate_group = all_genders_cate_group.transpose
+male_cate_group
+
+
+# 5:
+
+
+female_cate_group = df[df.Gender=="Female"].groupby("category")[["Age", "Sleep duration", "Sleep efficiency", "REM sleep percentage", 
+                                  "Deep sleep percentage", "Light sleep percentage", "Awakenings", "Smoking status", "Exercise frequency"]].agg(func='mean')
+# all_genders_cate_group = all_genders_cate_group.transpose
+female_cate_group
+
+
+# 5:
+
+
+gender_age_cate_group = df.groupby(["category", "Gender"])[["Age", "Sleep duration", "Sleep efficiency", "REM sleep percentage", 
+                                  "Deep sleep percentage", "Light sleep percentage", "Awakenings", "Smoking status", "Exercise frequency"]].agg(func='mean')
+# all_genders_cate_group = all_genders_cate_group.transpose
+gender_age_cate_group
+
+
+# 6:
+
+
+# min  
+gender_age_cate_group.sort_values("Sleep duration").head(1)["Sleep duration"]
+
+
+# 6:
+
+
+gender_age_cate_group.sort_values("Sleep duration").tail(1)["Sleep duration"]
+
+
+# 6:
+
+
+gender_age_cate_group.sort_values("Awakenings").head(1)["Awakenings"]
+
+
+# 6:
+
+
+gender_age_cate_group.sort_values("Awakenings").tail(1)["Awakenings"]
+
+
+# 7:
+
+
+gender_age_cate_group.sort_values("Sleep efficiency").head(1)["Sleep efficiency"]
+
+
+# 7:
+
+
+gender_age_cate_group.sort_values("Sleep efficiency").tail(1)["Sleep efficiency"]
+
+
+# 8:
+
+
+df.plot.scatter("Exercise frequency", "Sleep duration" )
+
+
+# 9:
+
+
+df.plot.scatter("Smoking status", "Sleep duration" )
