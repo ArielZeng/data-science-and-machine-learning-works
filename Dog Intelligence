@@ -1,0 +1,114 @@
+# step 1
+df_1 = pd.read_csv("AKC Breed Info.csv")
+df_1 = df_1.set_index("Breed")
+df_2 = pd.read_csv("dog_intelligence.csv")
+df_2 = df_2.set_index("Breed")
+print(df_1.head())
+print(df_2.head())
+
+# step 2, fill NA
+def get_good_mean(df_1, col_name):
+    good_values = df_1[col_name][df_1[col_name].notnull()]
+    good_values = good_values.astype(float)
+    hl = good_values.mean()
+    return hl
+
+
+print(df_1.head(20))
+df_1 = df_1.replace("na", np.nan)
+df_1 = df_1.replace("not found", np.nan)
+df_1.fillna(value={"height_low_inches" : get_good_mean(df_1, "height_low_inches"),
+                        "height_high_inches" : get_good_mean(df_1, "height_high_inches"),
+                        "weight_high_lbs" : get_good_mean(df_1, "weight_high_lbs"),
+                        "weight_low_lbs" : get_good_mean(df_1, "weight_low_lbs"),
+                         }, inplace=True)
+df_1 = df_1.astype(float) # "0.1"  "1.0"  "na"->float
+print(df_1.head(5))
+
+df_2["reps_lower"] = df_2["reps_lower"].astype(float)
+df_2["reps_upper"] = df_2["reps_upper"].astype(float)
+df_2["obey"] = df_2["obey"].str.strip("%").astype(float)
+df_2.fillna(value={"reps_lower" : get_good_mean(df_2, "reps_lower"),
+                        "reps_upper" : get_good_mean(df_2, "reps_upper"),
+                        "obey" : get_good_mean(df_2, "obey")
+                         }, inplace=True)
+print(df_2.head(5))
+
+# step 3 join
+df = df_1.join(df_2, how='inner',lsuffix='',rsuffix='_right')
+del df['index_right']
+print(df.head())
+df.to_csv("dog_info_combined.csv")
+
+# step 4 classification
+classes = df['Classification'].value_counts()
+most = classes.max()
+least = classes.min()
+print(classes)
+print(classes[classes == most])
+print(classes[classes == least])
+
+# step 5
+df["height"] = (df["height_low_inches"] + df["height_high_inches"]) / 2
+df["weight"] = (df["weight_low_lbs"] + df["weight_high_lbs"]) / 2
+print(df["height"].sort_values(ascending=False).head())
+print(df["height"].sort_values(ascending=True).head())
+print(df["weight"].sort_values(ascending=False).head())
+print(df["weight"].sort_values(ascending=True).head())
+
+# step 6
+df["height_var"] = (df["height_high_inches"] - df["height_low_inches"]) / (df["height_low_inches"] + df["height_high_inches"])
+df["weight_var"] = (df["weight_high_lbs"] - df["weight_low_lbs"]) / (df["weight_low_lbs"] + df["weight_high_lbs"])
+print(df.head())
+
+# step 7
+df["reps_var"] = (df["reps_upper"] - df["reps_lower"]) / (df["reps_upper"] + df["reps_lower"])
+print(df.head())
+
+# step 8
+print("rank vari=============================<<<<<<<<")
+print(df["height_var"].sort_values(ascending=False).head().index)
+print(df["weight_var"].sort_values(ascending=False).head().index)
+print(df["reps_var"].sort_values(ascending=False).head().index)
+
+print("rank vari=============================>>>>>>>>>>>>")
+print(df["height_var"].sort_values(ascending=True).head().index)
+print(df["weight_var"].sort_values(ascending=True).head().index)
+print(df["reps_var"].sort_values(ascending=True).head().index)
+
+
+# step 9
+print("groupby==============")
+classes = df.groupby("Classification")[["obey", "reps_lower", "reps_upper"]].agg(func=('mean', 'std'))
+print("classes stat===========")
+# print(classes)
+# print(classes.columns)
+classes.columns = ["obey_mean", "obey_std", "rep_low_mean", "rep_low_std", "rep_up_mean", "rep_up_std"]
+print(classes)
+
+#step 10
+df["reps_avg"] =  (df["reps_upper"] + df["reps_lower"]) / 2
+
+# step 11
+best_rep = df["reps_avg"].sort_values(ascending=False)
+print(best_rep.head(5))
+
+# step 12
+df[['height', 'obey']].plot(kind='scatter', x='height', y='obey')
+plt.show()
+df[['weight', 'obey']].plot(kind='scatter', x='weight', y='obey')
+plt.show()
+
+# step 13
+df[['height', 'reps_avg']].plot(kind='scatter', x='height', y='reps_avg')
+plt.show()
+
+# step 14
+df['linear'] = df["weight"] / df['height']
+df[['linear', 'reps_avg']].plot(kind='scatter', x='linear', y='reps_avg')
+plt.show()
+df[['linear', 'obey']].plot(kind='scatter', x='linear', y='obey')
+plt.show()
+
+# step 15
+df.to_csv("dogs_analysis.csv")
