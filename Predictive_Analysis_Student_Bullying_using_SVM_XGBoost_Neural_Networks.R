@@ -84,7 +84,12 @@ df_0 = df[,c("VS0019", "VS0043", "VS0046", "VS0058", "V2026", "V2034", "V2076", 
 #1 boruta
 install.packages("Boruta")
 library(Boruta)
-boruta_output <- Boruta(df$o_bullied ~ ., data=na.omit(df), doTrace=0)  
+set.seed(123)
+library(rsample)
+split <- initial_split(df_1, prop = 0.66, strata = o_bullied)
+train <- training(split)
+test <- testing(split)
+boruta_output <- Boruta(df$o_bullied ~ ., data=na.omit(train), doTrace=0)  
 boruta_signif <- getSelectedAttributes(boruta_output, withTentative = TRUE)
 print(boruta_signif)  
 #"V2038" "V2042CAT" "V2047" "V2050" "V3020" "V3024" "V3034" "V3035" "V3040" "V3041" "V3042" "V3043" "V3044" "V3045" "V3071" "V3072" "VS0002" "VS0006" "VS0010" "VS0017"    
@@ -111,22 +116,21 @@ head(imps2[order(-imps2$meanImp), ])  # descending sort
 #VS0046     9.855043 Confirmed
 plot(boruta_output, cex.axis=.7, las=2, xlab="", main="Variable Importance(boruta)") 
 #"VS0135" "VS0054""VS0047" "VS0155" "V4526H7_1""V4526H3A_1""VS0057""VS0048""V3034""VS0121""VS0010""V3020""VS0131""VS0112""VS0117""VS0123""VS0157"
-df_1 = df[,c("VS0135","VS0054","VS0047","VS0155","V4526H7_1","V4526H3A_1","VS0057","VS0048","V3034","VS0121","VS0010","V3020","VS0131","VS0112","VS0117","VS0123","VS0157","o_bullied")]
-set.seed(123)
-library(rsample)
-split <- initial_split(df_1, prop = 0.66, strata = o_bullied)
-train <- training(split)
-test <- testing(split)
+1_selected_features <- c("VS0135","VS0054","VS0047","VS0155","V4526H7_1","V4526H3A_1","VS0057","VS0048","V3034","VS0121","VS0010","V3020","VS0131","VS0112","VS0117","VS0123","VS0157","o_bullied")
+train_selected <- train[, 1_selected_features]
+test_selected <- test[, 1_selected_features]
+print(head(train_selected))
+print(head(test_selected))
 
 #support vector machine
 library(caret)
 
-result <- train(o_bullied ~ .,data = train, trControl = train_control,
+result <- train(o_bullied ~ .,data = train_selected, trControl = train_control,
                 method = "svmLinear")
-pred <- predict(result, test)
-test_labels <- test$o_bullied
+pred <- predict(result, test_selected)
+test_labels <- test_selected$o_bullied
 positive_class_label <- 'Yes'
-cm0 <- confusionMatrix(pred, test$o_bullied)
+cm0 <- confusionMatrix(pred, test_selected$o_bullied)
 cm0
 #Confusion Matrix and Statistics
 
@@ -194,12 +198,12 @@ train_control <- trainControl(
 set.seed(123)
 svm_model <- train(
      o_bullied ~ .,
-     data = train,
+     data = train_selected,
      method = "svmLinear",
      trControl = train_control,
      metric = "ROC"
  )
-predictions <- predict(svm_model, test, type = "prob")
+predictions <- predict(svm_model, test_selected, type = "prob")
 roc_obj <- roc(test_labels, predictions[, positive_class_label])
 print(auc(roc_obj))
 #Area under the curve: 0.6502positive的roc,negative是1-0.6502
@@ -214,11 +218,11 @@ f1
 #0.8737201
 
 #naive bayes
-result <- train(o_bullied ~ .,data = train, trControl = train_control,
+result <- train(o_bullied ~ .,data = train_selected, trControl = train_control,
                 method = "naive_bayes")
-pred <- predict(result, test)
-pred <- predict(result, test, type="prob")
-cm <- confusionMatrix(pred, test$o_bullied)
+pred <- predict(result, test_selected)
+pred <- predict(result, test_selected, type="prob")
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 #Confusion Matrix and Statistics
 
@@ -246,7 +250,7 @@ cm
 #      Balanced Accuracy : 0.4990865       
                                           
 #       'Positive' Class : No           
-roc_obj <- roc(test$o_bullied, pred$Yes)
+roc_obj <- roc(test_selected$o_bullied, pred$Yes)
 auc_value <- auc(roc_obj)
 print(auc_value)
 #Area under the curve: 0.6109
@@ -261,11 +265,11 @@ f1 = c(f1,cm$byClass["F1"])
 #0.873720137 0.001538462 
 
 #xgboost
-result <- train(o_bullied ~ .,data = train, trControl = train_control,
+result <- train(o_bullied ~ .,data = train_selected, trControl = train_control,
                 method = "xgbLinear")
-pred <- predict(result, test)
-pred <- predict(result, test, type="prob")
-cm <- confusionMatrix(pred, test$o_bullied)
+pred <- predict(result, test_selected)
+pred <- predict(result, test_selected, type="prob")
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 #Confusion Matrix and Statistics
 
@@ -293,7 +297,7 @@ cm
 #      Balanced Accuracy : 0.5812         
                                          
 #       'Positive' Class : No 
-roc_obj <- roc(test$o_bullied, pred$Yes)
+roc_obj <- roc(test_selected$o_bullied, pred$Yes)
 auc_value <- auc(roc_obj)
 print(auc_value)
 #Area under the curve: 0.6717
@@ -311,16 +315,16 @@ f1
 nnetGrid <- expand.grid(size = 1:10, decay = c(0, .1, 1, 2))
 ncol(train)
 #18
-result <- train(x = train[,-18], y = train$o_bullied,method = "nnet",tuneGrid = nnetGrid,
+result <- train(x = train_selected[,-18], y = train_selected$o_bullied,method = "nnet",tuneGrid = nnetGrid,
                 trace = FALSE,maxit = 100,MaxNWts = 1000,trControl = train_control)
-pred <- predict(result, test)
-pred <- predict(result, test, type = "prob")
-roc_obj <- roc(response = test$o_bullied, predictor = pred$Yes)
+pred <- predict(result, test_selected)
+pred <- predict(result, test_selected, type = "prob")
+roc_obj <- roc(response = test_selected$o_bullied, predictor = pred$Yes)
 auc_value <- auc(roc_obj)
 print(auc_value)
 #Area under the curve: 0.6832
 
-cm <- confusionMatrix(pred, test$o_bullied)
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 #Confusion Matrix and Statistics
 
@@ -359,13 +363,13 @@ f1
 
 # random forest
 mtryValues <- seq(2, ncol(df_1)-1, by = 1)
-result <- train(x = train[, -18], y = train$o_bullied, method = "rf",ntree = 500,
+result <- train(x = train_selected[, -18], y = train_selected$o_bullied, method = "rf",ntree = 500,
                 tuneGrid = data.frame(mtry = mtryValues),importance = TRUE,metric = "ROC",
                 trControl = train_control)
-pred <- predict(result, test)
-pred <- predict(result, test, type = "prob")
+pred <- predict(result, test_selected)
+pred <- predict(result, test_selected, type = "prob")
 
-cm <- confusionMatrix(pred, test$o_bullied)
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 #Confusion Matrix and Statistics
 
@@ -393,7 +397,7 @@ cm
 #      Balanced Accuracy : 0.5705          
                                           
 #       'Positive' Class : No              
-roc_obj <- roc(response = test$o_bullied, predictor = pred[,2])
+roc_obj <- roc(response = test_selected$o_bullied, predictor = pred[,2])
 auc_value <- auc(roc_obj)
 print(auc_value)
 #Area under the curve: 0.6716
@@ -411,9 +415,13 @@ f1
 set.seed(123)
 install.packages("glmnet")
 library(glmnet)
-x = as.matrix(df[,1:203])
-y = as.matrix(df[,204])
-cv.lasso <- cv.glmnet(x, y, family='binomial', alpha=1, parallel=TRUE, standardize=TRUE, type.measure='auc')
+set.seed(123)
+split <- initial_split(df, prop = 0.66, strata = o_bullied)
+train <- training(split)
+test <- testing(split)
+x_train <- as.matrix(train[, -ncol(train)])
+y_train <- as.matrix(train[, ncol(train)])
+cv.lasso <- cv.glmnet(x_train, y_train, family='binomial', alpha=1, parallel=TRUE, standardize=TRUE, type.measure='auc')
 plot(cv.lasso)
 df_coef <- round(as.matrix(coef(cv.lasso, s=cv.lasso$lambda.min)), 2)
 df_coef_abs <- abs(df_coef)
@@ -426,16 +434,17 @@ print(df_coef_significant)
 #-3.97       -1.02       -0.27       -0.25        0.26       -0.21       -0.43        0.29       -0.28       -0.30       -0.33 
 #VS0067      VS0115      VS0117      VS0157      VS0123      VS0124 
 #-0.23       -0.36       -0.48       -1.03       -0.45        0.73 
-df_2 = df[,c("V2025A","V2025B","V2050","V2119","V3014CAT","V3015","V3034","V3040","V3042","V3044","V3046","V3054","V3065","V3067","VS0007","VS0010","VS0031","VS0053","VS0055","VS0150","VS0059","VS0067","VS0115","VS0117","VS0157","VS0123","VS0124","o_bullied")]
-set.seed(123)
-split <- initial_split(df_2, prop = 0.66, strata = o_bullied)
-train <- training(split)
-test <- testing(split)
+selected_features <- rownames(df_coef_significant)[-1]
+df_2 <- df[, c(selected_features, "o_bullied")]
+train_selected <- train[, c(selected_features, "o_bullied")]
+test_selected <- test[, c(selected_features, "o_bullied")]
+print(head(train_selected))
+print(head(test_selected))
 
 #support vector machine
-result <- train(o_bullied ~ ., data = train, trControl = train_control, method = "svmLinear")
-pred <- predict(result, test)
-cm <- confusionMatrix(pred, test$o_bullied)
+result <- train(o_bullied ~ ., data = train_selected, trControl = train_control, method = "svmLinear")
+pred <- predict(result, test_selected)
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 #Confusion Matrix and Statistics
 
@@ -463,8 +472,8 @@ cm
 #      Balanced Accuracy : 0.5618          
                                           
 #       'Positive' Class : No  
-pred_probs <- predict(result, test, type = "prob")[, "Yes"]
-roc_curve <- roc(test$o_bullied, pred_probs)
+pred_probs <- predict(result, test_selected, type = "prob")[, "Yes"]
+roc_curve <- roc(test_selected$o_bullied, pred_probs)
 auc_value <- auc(roc_curve)
 print(auc_value)
 #Area under the curve: 0.6393
@@ -479,10 +488,10 @@ f1
 #0.873720137 0.001538462 0.868858254 0.878183070 0.876388889 0.880576527 
 
 #naive bayes
-result <- train(o_bullied ~ .,data = train, trControl = train_control,
+result <- train(o_bullied ~ .,data = train_selected, trControl = train_control,
                 method = "naive_bayes")
-pred <- predict(result, test)
-cm <- confusionMatrix(pred, test$o_bullied)
+pred <- predict(result, test_selected)
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 #Confusion Matrix and Statistics
 
@@ -518,8 +527,8 @@ f1 = c(f1,cm$byClass["F1"])
 f1
 #         F1          F1          F1          F1          F1          F1          F1 
 #0.873720137 0.001538462 0.868858254 0.878183070 0.876388889 0.880576527 0.874493927 
-pred_probs <- predict(result, test, type = "prob")[, "Yes"]
-roc_curve <- roc(test$o_bullied, pred_probs)
+pred_probs <- predict(result, test_selected, type = "prob")[, "Yes"]
+roc_curve <- roc(test_selected$o_bullied, pred_probs)
 auc_value <- auc(roc_curve)
 print(auc_value)
 #Area under the curve: 0.6587
@@ -528,10 +537,10 @@ coords(roc_curve, "best", ret = c("sensitivity", "specificity"))
 #1   0.5662338   0.6895223
 
 #xgboost
-result <- train(o_bullied ~ .,data = train, trControl = train_control,
+result <- train(o_bullied ~ .,data = train_selected, trControl = train_control,
                 method = "xgbLinear")
-pred <- predict(result, test)
-cm <- confusionMatrix(pred, test$o_bullied)
+pred <- predict(result, test_selected)
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 #Confusion Matrix and Statistics
 
@@ -567,8 +576,8 @@ f1 = c(f1,cm$byClass["F1"])
 f1
 #F1          F1          F1          F1          F1          F1          F1          F1 
 #0.873720137 0.001538462 0.868858254 0.878183070 0.876388889 0.880576527 0.874493927 0.875044248 
-pred_probs <- predict(result, test, type = "prob")[, "Yes"]
-roc_curve <- roc(test$o_bullied, pred_probs)
+pred_probs <- predict(result, test_selected, type = "prob")[, "Yes"]
+roc_curve <- roc(test_selected$o_bullied, pred_probs)
 auc_value <- auc(roc_curve)
 print(auc_value)
 #Area under the curve: 0.709
@@ -579,10 +588,10 @@ print(coords_optimal)
 
 #neural net
 nnetGrid <- expand.grid(size = 1:10, decay = c(0, .1, 1, 2))
-result <- train(x = train[,-28], y = train$o_bullied,method = "nnet",tuneGrid = nnetGrid,
+result <- train(x = train_selected[,-28], y = train_selected$o_bullied,method = "nnet",tuneGrid = nnetGrid,
                 trace = FALSE,maxit = 100,MaxNWts = 1000,trControl = train_control)
-pred <- predict(result, test)
-cm <- confusionMatrix(pred, test$o_bullied)
+pred <- predict(result, test_selected)
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 #Confusion Matrix and Statistics
 
@@ -618,8 +627,8 @@ f1 = c(f1,cm$byClass["F1"])
 f1
 #         F1          F1          F1          F1          F1          F1          F1          F1          F1 
 #0.873720137 0.001538462 0.868858254 0.878183070 0.876388889 0.880576527 0.874493927 0.875044248 0.887017544 
-pred_probs <- predict(result, test, type = "prob")
-roc_curve <- roc(test$o_bullied, pred_probs[,2])
+pred_probs <- predict(result, test_selected, type = "prob")
+roc_curve <- roc(test_selected$o_bullied, pred_probs[,2])
 auc_value <- auc(roc_curve)
 print(paste("AUC for nnet model:", auc_value))
 #"AUC for nnet model: 0.717631521021352"
@@ -631,11 +640,11 @@ print(coords_optimal)
 # random forest
 train_control <- trainControl(method = "cv", number = 10, summaryFunction = twoClassSummary, classProbs = TRUE, savePredictions = TRUE)
 mtryValues <- seq(2, ncol(df_2)-1, by = 1)
-result <- train(x = train[, -28], y = train$o_bullied, method = "rf",ntree = 500,
+result <- train(x = train_selected[, -28], y = train_selected$o_bullied, method = "rf",ntree = 500,
                 tuneGrid = data.frame(mtry = mtryValues),importance = TRUE,metric = "ROC",
                 trControl = train_control)
-pred <- predict(result, test)
-cm <- confusionMatrix(pred, test$o_bullied)
+pred <- predict(result, test_selected)
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 #Confusion Matrix and Statistics
 
@@ -671,8 +680,8 @@ f1 = c(f1,cm$byClass["F1"])
 f1
 #F1          F1          F1          F1          F1          F1          F1          F1          F1          F1 
 #0.873720137 0.001538462 0.868858254 0.878183070 0.876388889 0.880576527 0.874493927 0.875044248 0.887017544 0.885085575 
-pred_probs <- predict(result, test, type = "prob")
-roc_curve <- roc(test$o_bullied, pred_probs[,2])
+pred_probs <- predict(result, test_selected, type = "prob")
+roc_curve <- roc(test_selected$o_bullied, pred_probs[,2])
 auc_value <- auc(roc_curve)
 print(paste("AUC for Random Forest model:", auc_value))
 #"AUC for Random Forest model: 0.698609248994457"
@@ -683,20 +692,20 @@ print(coords_optimal)
 
 #3 variable importance
 set.seed(123)
-rPartMod <- train(o_bullied ~ ., data=df, method="rpart")
-rpartImp <- varImp(rPartMod)
-print(rpartImp)
-df_3 = df[,c("VS0046","VS0070","VS0069","VS0112","VS0124","VS0157","VS0115","VS0002","VS0006","V4526AA_1","VS0116","V3042","V3043","VS0148","VS0061","VS0023","V3024","V3012","V3048","o_bullied")]
-set.seed(123)
-split <- initial_split(df_3, prop = 0.66, strata = o_bullied)
+split <- initial_split(df, prop = 0.66, strata = o_bullied)
 train <- training(split)
 test <- testing(split)
+rPartMod <- train(o_bullied ~ ., data=train, method="rpart")
+rpartImp <- varImp(rPartMod)
+print(rpartImp)
+selected_features <- rownames(rpartImp$importance)[order(-rpartImp$importance[,1])[1:20]] # 选择前20个重要特征
+df_3 <- df[, c(selected_features, "o_bullied")]
+train_selected <- train[, c(selected_features, "o_bullied")]
+test_selected <- test[, c(selected_features, "o_bullied")]
+print(head(train_selected))
+print(head(test_selected))
 
 #support vector machine
-# Pre-process your data
-preProcValues <- preProcess(train[, -ncol(train)], method = c("center", "scale"))
-train_scaled <- predict(preProcValues, train[, -ncol(train)])
-train_scaled$o_bullied <- train$o_bullied  # Add the outcome variable back to the scaled data
 
 # Define the control parameters for the train function
 train_control <- trainControl(method = "repeatedcv", number = 10, repeats = 3, search = "grid")
@@ -706,11 +715,11 @@ tune_grid <- expand.grid(C = 10^(-2:2))  # You can change the range based on you
 
 # Train the model using the 'svmLinear' method with the defined tuning grid
 set.seed(123)
-result <- train(o_bullied ~ ., data = train_scaled, method = "svmLinear",
+result <- train(o_bullied ~ ., data = train_selected, method = "svmLinear",
                 trControl = train_control, tuneLength = 5, preProcess = c("center", "scale"),
                 tuneGrid = tune_grid)
-pred <- predict(result, test)
-cm <- confusionMatrix(pred, test$o_bullied)
+pred <- predict(result, test_selected)
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 #Confusion Matrix and Statistics
 
@@ -742,7 +751,7 @@ cm
 tune_grid <- expand.grid(C = 10^(-2:2), sigma = 10^(-2:2))  # Adjust the ranges as necessary
 
 # Make sure the response variable is a factor
-train$o_bullied <- factor(train$o_bullied, levels = c("No", "Yes"))
+train$o_bullied <- factor(train_selected$o_bullied, levels = c("No", "Yes"))
 
 # Update train_control to save the best tuning parameters
 train_control <- trainControl(method = "repeatedcv",
@@ -754,14 +763,14 @@ train_control <- trainControl(method = "repeatedcv",
 
 # Train the model using the 'svmRadial' method with the new tuning grid
 set.seed(123)
-result <- train(o_bullied ~ ., data = train,
+result <- train(o_bullied ~ ., data = train_selected,
                 method = "svmRadial",
                 trControl = train_control,
                 preProcess = c("center", "scale"),
                 tuneGrid = tune_grid,
                 metric = "ROC")
-pred_probs <- predict(result, test, type = "prob")[, "Yes"]
-roc_curve <- roc(test$o_bullied, pred_probs)
+pred_probs <- predict(result, test_selected, type = "prob")[, "Yes"]
+roc_curve <- roc(test_selected$o_bullied, pred_probs)
 auc_value <- auc(roc_curve)
 print(auc_value)
 #Area under the curve: 0.72
@@ -776,10 +785,10 @@ f1
 #0.873720137 0.001538462 0.868858254 0.878183070 0.876388889 0.880576527 0.874493927 0.875044248 0.887017544 0.885085575 0.870848708  
 
 #naive bayes
-result <- train(o_bullied ~ .,data = train, trControl = train_control,
+result <- train(o_bullied ~ .,data = train_selected, trControl = train_control,
                 method = "naive_bayes")
-pred <- predict(result, test)
-cm <- confusionMatrix(pred, test$o_bullied)
+pred <- predict(result, test_selected)
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 #Confusion Matrix and Statistics
 
@@ -816,8 +825,8 @@ f1
 #        F1          F1          F1          F1          F1          F1          F1          F1          F1          F1          F1   F1 
 #0.873720137 0.001538462 0.868858254 0.878183070 0.876388889 0.880576527 0.874493927 0.875044248 0.887017544 0.885085575 0.870848708 0.716553288
 
-pred_probs <- predict(result, test, type = "prob")[, "Yes"]
-roc_curve <- roc(test$o_bullied, pred_probs)
+pred_probs <- predict(result, test_selected, type = "prob")[, "Yes"]
+roc_curve <- roc(test_selected$o_bullied, pred_probs)
 auc_value <- auc(roc_curve)
 print(auc_value)
 #Area under the curve: 0.6944
@@ -826,10 +835,10 @@ coords(roc_curve, "best", ret = c("sensitivity", "specificity"))
 #1   0.6181818   0.6910632
 
 #xgboost
-result <- train(o_bullied ~ .,data = train, trControl = train_control,
+result <- train(o_bullied ~ .,data = train_selected, trControl = train_control,
                 method = "xgbLinear")
-pred <- predict(result, test)
-cm <- confusionMatrix(pred, test$o_bullied)
+pred <- predict(result, test_selected)
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 #Confusion Matrix and Statistics
 
@@ -867,8 +876,8 @@ f1
 #0.873720137 0.001538462 0.868858254 0.878183070 0.876388889 0.880576527 0.874493927 0.875044248 0.887017544 0.885085575 0.870848708 
 #F1          F1 
 #0.716553288 0.879599857  
-pred_probs <- predict(result, test, type = "prob")[, "Yes"]
-roc_curve <- roc(test$o_bullied, pred_probs)
+pred_probs <- predict(result, test_selected, type = "prob")[, "Yes"]
+roc_curve <- roc(test_selected$o_bullied, pred_probs)
 auc_value <- auc(roc_curve)
 print(auc_value)
 #Area under the curve: 0.7249
@@ -880,10 +889,10 @@ print(coords_optimal)
 #neural net
 nnetGrid <- expand.grid(size = 1:10, decay = c(0, .1, 1, 2))
 ncol(train)
-result <- train(x = train[,-20], y = train$o_bullied,method = "nnet",tuneGrid = nnetGrid,
+result <- train(x = train_selected[,-20], y = train_selected$o_bullied,method = "nnet",tuneGrid = nnetGrid,
                 trace = FALSE,maxit = 100,MaxNWts = 1000,trControl = train_control)
-pred <- predict(result, test)
-cm <- confusionMatrix(pred, test$o_bullied)
+pred <- predict(result, test_selected)
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 #Confusion Matrix and Statistics
 
@@ -923,8 +932,8 @@ f1
 #0.873720137 0.001538462 0.868858254 0.878183070 0.876388889 0.880576527 0.874493927 0.875044248 0.887017544 0.885085575 0.870848708 
 #F1          F1          F1 
 #0.716553288 0.879599857 0.881079162 
-pred_probs <- predict(result, test, type = "prob")
-roc_curve <- roc(test$o_bullied, pred_probs[,2])
+pred_probs <- predict(result, test_selected, type = "prob")
+roc_curve <- roc(test_selected$o_bullied, pred_probs[,2])
 auc_value <- auc(roc_curve)
 print(paste("AUC for nnet model:", auc_value))
 #"AUC for nnet model: 0.747808816761051"
@@ -936,11 +945,14 @@ print(coords_optimal)
 # random forest
 train_control <- trainControl(method = "cv", number = 10, summaryFunction = twoClassSummary, classProbs = TRUE, savePredictions = TRUE)
 mtryValues <- seq(2, ncol(df_3)-1, by = 1)
-result <- train(x = train[, -20], y = train$o_bullied, method = "rf",ntree = 500,
+result <- train(x = train# random forest
+train_control <- trainControl(method = "cv", number = 10, summaryFunction = twoClassSummary, classProbs = TRUE, savePredictions = TRUE)
+mtryValues <- seq(2, ncol(df_3)-1, by = 1)
+result <- train(x = train_selected[, -20], y = train_selected$o_bullied, method = "rf",ntree = 500,
                 tuneGrid = data.frame(mtry = mtryValues),importance = TRUE,metric = "ROC",
                 trControl = train_control)
-pred <- predict(result, test)
-cm <- confusionMatrix(pred, test$o_bullied)
+pred <- predict(result, test_selected)
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 # Confusion Matrix and Statistics
 # 
@@ -982,8 +994,62 @@ f1
 # 0.879599857 0.881079162 0.883525708 0.874074074 0.675649663 0.880538816 0.879261364 0.882083773 0.874873524 0.675649663 0.865905849 0.870848708 
 # F1          F1          F1          F1 
 # 0.864197531 0.876340243 0.877168633 0.876664331 
-pred_probs <- predict(result, test, type = "prob")
-roc_curve <- roc(test$o_bullied, pred_probs[,2])
+pred_probs <- predict(result, test_selected, type = "prob")
+roc_curve <- roc(test_selected$o_bullied, pred_probs[,2])
+auc_value <- auc(roc_curve)
+print(paste("AUC for Random Forest model:", auc_value))
+#"AUC for Random Forest model: 0.708981850199108"
+coords_optimal <- coords(roc_curve, "best", ret = c("sensitivity", "specificity"))
+print(coords_optimal)
+#   sensitivity specificity
+#1   0.6   0.7442219[, -20], y = train_selected$o_bullied, method = "rf",ntree = 500,
+                tuneGrid = data.frame(mtry = mtryValues),importance = TRUE,metric = "ROC",
+                trControl = train_control)
+pred <- predict(result, test_selected)
+cm <- confusionMatrix(pred, test_selected$o_bullied)
+cm
+# Confusion Matrix and Statistics
+# 
+# Reference
+# Prediction   No  Yes
+# No  1251  305
+# Yes   47   80
+# 
+# Accuracy : 0.7908          
+# 95% CI : (0.7706, 0.8101)
+# No Information Rate : 0.7712          
+# P-Value [Acc > NIR] : 0.02871         
+# 
+# Kappa : 0.2245          
+# 
+# Mcnemar's Test P-Value : < 2e-16         
+#                                           
+#             Sensitivity : 0.9638          
+#             Specificity : 0.2078          
+#          Pos Pred Value : 0.8040          
+#          Neg Pred Value : 0.6299          
+#              Prevalence : 0.7712          
+#          Detection Rate : 0.7433          
+#    Detection Prevalence : 0.9245          
+#       Balanced Accuracy : 0.5858          
+#                                           
+#        'Positive' Class : No             
+temp = c(temp,cm$overall["Accuracy"])
+temp
+# Accuracy  Accuracy  Accuracy  Accuracy  Accuracy  Accuracy  Accuracy  Accuracy  Accuracy  Accuracy  Accuracy  Accuracy  Accuracy  Accuracy 
+# 0.7801545 0.2287582 0.7795603 0.7896613 0.7884730 0.7932264 0.7789661 0.7902555 0.8086750 0.8045157 0.7712418 0.6286393 0.7997623 0.8009507 
+# Accuracy  Accuracy  Accuracy  Accuracy  Accuracy  Accuracy  Accuracy  Accuracy  Accuracy  Accuracy  Accuracy  Accuracy  Accuracy  Accuracy 
+# 0.8021390 0.7777778 0.5995247 0.7997623 0.7979798 0.8009507 0.7795603 0.5995247 0.7765894 0.7712418 0.7777778 0.7944147 0.7896613 0.7908497 
+f1 = c(f1,cm$byClass["F1"])
+f1
+# F1          F1          F1          F1          F1          F1          F1          F1          F1          F1          F1          F1 
+# 0.873720137 0.001538462 0.868858254 0.878183070 0.876388889 0.880576527 0.874493927 0.875044248 0.887017544 0.885085575 0.870848708 0.716553288 
+# F1          F1          F1          F1          F1          F1          F1          F1          F1          F1          F1          F1 
+# 0.879599857 0.881079162 0.883525708 0.874074074 0.675649663 0.880538816 0.879261364 0.882083773 0.874873524 0.675649663 0.865905849 0.870848708 
+# F1          F1          F1          F1 
+# 0.864197531 0.876340243 0.877168633 0.876664331 
+pred_probs <- predict(result, test_selected, type = "prob")
+roc_curve <- roc(test_selected$o_bullied, pred_probs[,2])
 auc_value <- auc(roc_curve)
 print(paste("AUC for Random Forest model:", auc_value))
 #"AUC for Random Forest model: 0.708981850199108"
@@ -994,18 +1060,11 @@ print(coords_optimal)
 
 #4 Recursive Feature Elimination
 set.seed(123)
-
-ctrl_param <- rfeControl(functions = rfFuncs,
-                         method = "repeatedcv",
-                         repeats = 5,
-                         number =10,
-                         verbose = FALSE,
-                         returnResamp = "all")
-ncol(df)
-# 204
-rfe_lm_profile <- rfe(df[,-204], df[, 204],
-                      sizes = c(2,3),
-                      rfeControl = ctrl_param)
+split <- initial_split(df, prop = 0.66, strata = o_bullied)
+train <- training(split)
+test <- testing(split)
+ctrl_param <- rfeControl(functions = rfFuncs, method = "repeatedcv", repeats = 5, number = 10, verbose = FALSE, returnResamp = "all")
+rfe_lm_profile <- rfe(train[,-ncol(train)], train[, ncol(train)], sizes = c(2, 3), rfeControl = ctrl_param)
 importance <- varImp(rfe_lm_profile, scale = FALSE)
 print(importance)
 #从列表里选出了6以上的
@@ -1213,18 +1272,16 @@ print(importance)
 #V3067      -0.76427333
 #V3077      -0.77307740
 #V3038      -0.98825243
-df_4 = df[,c("VS0046","VS0069","VS0124","VS0070","VS0157","VS0112","VS0123","VS0051","VS0115",
-             "V3043","VS0116","VS0117","V3042","VS0053","VS0131","VS0130","V3041","V3040","V3044","V3045",
-             "o_bullied")]
-set.seed(123)
+important_features <- rownames(importance$importance)
+df_4 <- df[, c(important_features, "o_bullied")]
 split <- initial_split(df_4, prop = 0.66, strata = o_bullied)
-train <- training(split)
-test <- testing(split)
+train_selected <- training(split)
+test_selected  <- testing(split)
 
 #support vector machine
-result <- train(o_bullied ~ ., data = train, trControl = train_control, method = "svmLinear")
-pred <- predict(result, test)
-cm <- confusionMatrix(pred, test$o_bullied)
+result <- train(o_bullied ~ ., data = train_selected, trControl = train_control, method = "svmLinear")
+pred <- predict(result, test_selected)
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 #Confusion Matrix and Statistics
 
@@ -1253,8 +1310,8 @@ cm
                                           
 #       'Positive' Class : No              
                                         
-pred_probs <- predict(result, test, type = "prob")[, "Yes"]
-roc_curve <- roc(test$o_bullied, pred_probs)
+pred_probs <- predict(result, test_selected, type = "prob")[, "Yes"]
+roc_curve <- roc(test_selected$o_bullied, pred_probs)
 auc_value <- auc(roc_curve)
 print(auc_value)
 #Area under the curve: 0.6488
@@ -1273,10 +1330,10 @@ f1
 #0.716553288 0.879599857 0.881079162 0.883525708 0.874074074
 
 #naive bayes
-result <- train(o_bullied ~ .,data = train, trControl = train_control,
+result <- train(o_bullied ~ .,data = train_selected, trControl = train_control,
                 method = "naive_bayes")
-pred <- predict(result, test)
-cm <- confusionMatrix(pred, test$o_bullied)
+pred <- predict(result, test_selected)
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 #Confusion Matrix and Statistics
 
@@ -1317,8 +1374,8 @@ f1
 #F1          F1          F1          F1          F1          F1 
 #0.716553288 0.879599857 0.881079162 0.883525708 0.874074074 0.675649663 
 
-pred_probs <- predict(result, test, type = "prob")[, "Yes"]
-roc_curve <- roc(test$o_bullied, pred_probs)
+pred_probs <- predict(result, test_selected, type = "prob")[, "Yes"]
+roc_curve <- roc(test_selected$o_bullied, pred_probs)
 auc_value <- auc(roc_curve)
 print(auc_value)
 #Area under the curve: 0.7174
@@ -1327,10 +1384,10 @@ coords(roc_curve, "best", ret = c("sensitivity", "specificity"))
 #1   0.7974026    0.540832
 
 #xgboost
-result <- train(o_bullied ~ .,data = train, trControl = train_control,
+result <- train(o_bullied ~ .,data = train_selected, trControl = train_control,
                 method = "xgbLinear")
-pred <- predict(result, test)
-cm <- confusionMatrix(pred, test$o_bullied)
+pred <- predict(result, test_selected)
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 #Confusion Matrix and Statistics
 
@@ -1370,8 +1427,8 @@ f1
 #0.873720137 0.001538462 0.868858254 0.878183070 0.876388889 0.880576527 0.874493927 0.875044248 0.887017544 0.885085575 0.870848708 
 #F1          F1          F1          F1          F1          F1          F1 
 #0.716553288 0.879599857 0.881079162 0.883525708 0.874074074 0.675649663 0.880538816 
-pred_probs <- predict(result, test, type = "prob")[, "Yes"]
-roc_curve <- roc(test$o_bullied, pred_probs)
+pred_probs <- predict(result, test_selected, type = "prob")[, "Yes"]
+roc_curve <- roc(test_selected$o_bullied, pred_probs)
 auc_value <- auc(roc_curve)
 print(auc_value)
 #Area under the curve: 0.7535
@@ -1383,10 +1440,10 @@ print(coords_optimal)
 #neural net
 nnetGrid <- expand.grid(size = 1:10, decay = c(0, .1, 1, 2))
 ncol(train)
-result <- train(x = train[,-21], y = train$o_bullied,method = "nnet",tuneGrid = nnetGrid,
+result <- train(x = train_selected[,-21], y = train_selected$o_bullied,method = "nnet",tuneGrid = nnetGrid,
                 trace = FALSE,maxit = 100,MaxNWts = 1000,trControl = train_control)
-pred <- predict(result, test)
-cm <- confusionMatrix(pred, test$o_bullied)
+pred <- predict(result, test_selected)
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 #Confusion Matrix and Statistics
 
@@ -1426,8 +1483,8 @@ f1
 #0.873720137 0.001538462 0.868858254 0.878183070 0.876388889 0.880576527 0.874493927 0.875044248 0.887017544 0.885085575 0.870848708 
 #F1          F1          F1          F1          F1          F1          F1          F1 
 #0.716553288 0.879599857 0.881079162 0.883525708 0.874074074 0.675649663 0.880538816 0.879261364 
-pred_probs <- predict(result, test, type = "prob")
-roc_curve <- roc(test$o_bullied, pred_probs[,2])
+pred_probs <- predict(result, test_selected, type = "prob")
+roc_curve <- roc(test_selected$o_bullied, pred_probs[,2])
 auc_value <- auc(roc_curve)
 print(paste("AUC for nnet model:", auc_value))
 #"AUC for nnet model: 0.73923518700098"
@@ -1439,11 +1496,11 @@ print(coords_optimal)
 # random forest
 train_control <- trainControl(method = "cv", number = 10, summaryFunction = twoClassSummary, classProbs = TRUE, savePredictions = TRUE)
 mtryValues <- seq(2, ncol(df_4)-1, by = 1)
-result <- train(x = train[, -21], y = train$o_bullied, method = "rf",ntree = 500,
+result <- train(x = train_selected[, -21], y = train_selected$o_bullied, method = "rf",ntree = 500,
                 tuneGrid = data.frame(mtry = mtryValues),importance = TRUE,metric = "ROC",
                 trControl = train_control)
-pred <- predict(result, test)
-cm <- confusionMatrix(pred, test$o_bullied)
+pred <- predict(result, test_selected)
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 #Confusion Matrix and Statistics
 
@@ -1483,8 +1540,8 @@ f1
 #0.873720137 0.001538462 0.868858254 0.878183070 0.876388889 0.880576527 0.874493927 0.875044248 0.887017544 0.885085575 0.870848708 0.716553288 
 #F1          F1          F1          F1          F1          F1          F1          F1 
 #0.879599857 0.881079162 0.883525708 0.874074074 0.675649663 0.880538816 0.879261364 0.882083773 
-pred_probs <- predict(result, test, type = "prob")
-roc_curve <- roc(test$o_bullied, pred_probs[,2])
+pred_probs <- predict(result, test_selected, type = "prob")
+roc_curve <- roc(test_selected$o_bullied, pred_probs[,2])
 auc_value <- auc(roc_curve)
 print(paste("AUC for Random Forest model:", auc_value))
 #"AUC for Random Forest model: 0.73412842935185"
@@ -1495,8 +1552,11 @@ print(coords_optimal)
 
 #5 Random forest importance
 set.seed(123)
-
-rfModel <-randomForest(o_bullied ~ ., data = df)
+library(rsample)
+split <- initial_split(df_5, prop = 0.66, strata = o_bullied)
+train <- training(split)
+test <- testing(split)
+rfModel <-randomForest(o_bullied ~ ., data = train)
 importance_matrix <- importance(rfModel)
 importance_values <- as.numeric(importance_matrix[, 1])
 importance_values <- as.numeric(importance_matrix[, 1])
@@ -1710,21 +1770,18 @@ print(importance_df_sorted)
 
 # VS0046 V3032 VS0069 VS0124 V2026 VS0112 V3020 V2038 VS0017 V2047 VS0022 V2122 V2126B VS0070 VS0051 VS0010 VS0047 V2078 VS0141 VS0055 VS0053 V2127B VS0050
 
-df_5 = df[,c("VS0046","V3032","VS0069",
-             "VS0124","V2026","VS0112","V3020", "V2038", "VS0017", "V2047", "VS0022", "V2122", "V2126B", 
-             "VS0070", "VS0051", "VS0010", "VS0047", "V2078", "VS0141", "VS0055", "VS0053", "V2127B", "VS0050","o_bullied")]
-
-
-set.seed(123)
-library(rsample)
+important_features <- head(importance_df_sorted$Variable, 20)
+df_5 <- df[, c(important_features, "o_bullied")]
 split <- initial_split(df_5, prop = 0.66, strata = o_bullied)
-train <- training(split)
-test <- testing(split)
+train_selected <- training(split)
+test_selected <- testing(split)
+
+
 
 #support vector machine
-result <- train(o_bullied ~ ., data = train, trControl = train_control, method = "svmLinear")
-pred <- predict(result, test)
-cm <- confusionMatrix(pred, test$o_bullied)
+result <- train(o_bullied ~ ., data = train_selected, trControl = train_control, method = "svmLinear")
+pred <- predict(result, test_selected)
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 # Confusion Matrix and Statistics
 # 
@@ -1753,8 +1810,8 @@ cm
 #                                           
 #        'Positive' Class : No                     
 
-pred_probs <- predict(result, test, type = "prob")[, "Yes"]
-roc_curve <- roc(test$o_bullied, pred_probs)
+pred_probs <- predict(result, test_selected, type = "prob")[, "Yes"]
+roc_curve <- roc(test_selected$o_bullied, pred_probs)
 auc_value <- auc(roc_curve)
 print(auc_value)
 #Area under the curve: 0.6752
@@ -1773,10 +1830,10 @@ f1
 # 0.879599857 0.881079162 0.883525708 0.874074074 0.675649663 0.880538816 0.879261364 0.882083773 0.874873524 0.675649663 0.865905849 0.870848708
 
 #naive bayes
-result <- train(o_bullied ~ .,data = train, trControl = train_control,
+result <- train(o_bullied ~ .,data = train_selected, trControl = train_control,
                 method = "naive_bayes")
-pred <- predict(result, test)
-cm <- confusionMatrix(pred, test$o_bullied)
+pred <- predict(result, test_selected)
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 # Confusion Matrix and Statistics
 # 
@@ -1817,8 +1874,8 @@ f1
 # F1          F1          F1          F1          F1          F1          F1          F1          F1          F1          F1 
 # 0.879599857 0.881079162 0.883525708 0.874074074 0.675649663 0.880538816 0.879261364 0.882083773 0.874873524 0.675649663 0.865905849
 
-pred_probs <- predict(result, test, type = "prob")[, "Yes"]
-roc_curve <- roc(test$o_bullied, pred_probs)
+pred_probs <- predict(result, test_selected, type = "prob")[, "Yes"]
+roc_curve <- roc(test_selected$o_bullied, pred_probs)
 auc_value <- auc(roc_curve)
 print(auc_value)
 #Area under the curve: 0.7071
@@ -1827,10 +1884,10 @@ coords(roc_curve, "best", ret = c("sensitivity", "specificity"))
 #1   0.5896104   0.7380586
 
 #xgboost
-result <- train(o_bullied ~ .,data = train, trControl = train_control,
+result <- train(o_bullied ~ .,data = train_selected, trControl = train_control,
                 method = "xgbLinear")
-pred <- predict(result, test)
-cm <- confusionMatrix(pred, test$o_bullied)
+pred <- predict(result, test_selected)
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 # Confusion Matrix and Statistics
 # 
@@ -1872,8 +1929,8 @@ f1
 # 0.879599857 0.881079162 0.883525708 0.874074074 0.675649663 0.880538816 0.879261364 0.882083773 0.874873524 0.675649663 0.865905849 0.870848708 
 # F1 
 # 0.864197531 
-pred_probs <- predict(result, test, type = "prob")[, "Yes"]
-roc_curve <- roc(test$o_bullied, pred_probs)
+pred_probs <- predict(result, test_selected, type = "prob")[, "Yes"]
+roc_curve <- roc(test_selected$o_bullied, pred_probs)
 auc_value <- auc(roc_curve)
 print(auc_value)
 #Area under the curve: 0.7125
@@ -1885,10 +1942,10 @@ print(coords_optimal)
 #neural net
 nnetGrid <- expand.grid(size = 1:10, decay = c(0, .1, 1, 2))
 ncol(train)
-result <- train(x = train[,-24], y = train$o_bullied,method = "nnet",tuneGrid = nnetGrid,
+result <- train(x = train_selected[,-24], y = train_selected$o_bullied,method = "nnet",tuneGrid = nnetGrid,
                 trace = FALSE,maxit = 100,MaxNWts = 1000,trControl = train_control)
-pred <- predict(result, test)
-cm <- confusionMatrix(pred, test$o_bullied)
+pred <- predict(result, test_selected)
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 # Confusion Matrix and Statistics
 # 
@@ -1930,8 +1987,8 @@ f1
 # 0.879599857 0.881079162 0.883525708 0.874074074 0.675649663 0.880538816 0.879261364 0.882083773 0.874873524 0.675649663 0.865905849 0.870848708 
 # F1          F1 
 # 0.864197531 0.876340243 
-pred_probs <- predict(result, test, type = "prob")
-roc_curve <- roc(test$o_bullied, pred_probs[,2])
+pred_probs <- predict(result, test_selected, type = "prob")
+roc_curve <- roc(test_selected$o_bullied, pred_probs[,2])
 auc_value <- auc(roc_curve)
 print(paste("AUC for nnet model:", auc_value))
 #"AUC for nnet model: 0.740268745122366"
@@ -1943,11 +2000,11 @@ print(coords_optimal)
 # random forest
 train_control <- trainControl(method = "cv", number = 10, summaryFunction = twoClassSummary, classProbs = TRUE, savePredictions = TRUE)
 mtryValues <- seq(2, ncol(df_5)-1, by = 1)
-result <- train(x = train[, -24], y = train$o_bullied, method = "rf",ntree = 500,
+result <- train(x = train_selected[, -24], y = train_selected$o_bullied, method = "rf",ntree = 500,
                 tuneGrid = data.frame(mtry = mtryValues),importance = TRUE,metric = "ROC",
                 trControl = train_control)
-pred <- predict(result, test)
-cm <- confusionMatrix(pred, test$o_bullied)
+pred <- predict(result, test_selected)
+cm <- confusionMatrix(pred, test_selected$o_bullied)
 cm
 # Confusion Matrix and Statistics
 # 
@@ -1989,8 +2046,8 @@ f1
 # 0.879599857 0.881079162 0.883525708 0.874074074 0.675649663 0.880538816 0.879261364 0.882083773 0.874873524 0.675649663 0.865905849 0.870848708 
 # F1          F1          F1 
 # 0.864197531 0.876340243 0.877168633 
-pred_probs <- predict(result, test, type = "prob")
-roc_curve <- roc(test$o_bullied, pred_probs[,2])
+pred_probs <- predict(result, test_selected, type = "prob")
+roc_curve <- roc(test_selected$o_bullied, pred_probs[,2])
 auc_value <- auc(roc_curve)
 print(paste("AUC for Random Forest model:", auc_value))
 #"AUC for Random Forest model: 0.762449722850339"
